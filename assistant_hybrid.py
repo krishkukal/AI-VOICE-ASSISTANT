@@ -1,4 +1,4 @@
-# assistant_hybrid.py - Using Windows Built-in Speech (100% Working)
+# assistant_hybrid.py - Using Windows Built-in Speech 
 import speech_recognition as sr
 import datetime
 import sys
