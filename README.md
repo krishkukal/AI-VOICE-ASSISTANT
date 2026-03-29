@@ -43,7 +43,7 @@ A powerful, intelligent voice assistant that listens to your voice commands, ans
 | `help` | Show commands |
 | `exit` | Quit assistant |
 
-**Ask anything!** - "What is machine learning?", "Who is India's President?", "Tell me a fun fact", "Explain quantum physics"
+**Ask anything!** - "What is machine learning?", "Who is India's President?", "Tell me a fun fact", "Explain quantum physics", "Todays Weather"
 
 ## Quick Start
 
