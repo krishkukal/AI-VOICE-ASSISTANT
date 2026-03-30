@@ -9,6 +9,8 @@ import random
 import requests
 import os
 import subprocess
+import threading
+import time
 
 # Try Windows speech first
 try:
@@ -94,9 +96,31 @@ class HybridAssistant:
         self.institute = "Tecnia Institute"
         self.mode = "voice"
         
+        # Flag for shutdown/restart cancellation
+        self.cancel_action = False
+        
         # Mode switching phrases
         self.text_mode_phrases = ['text mode', 'switch to text', 'typing mode', 'text', 'typing']
         self.voice_mode_phrases = ['voice mode', 'switch to voice', 'speak mode', 'voice', 'speak']
+        
+        # Shutdown phrases
+        self.shutdown_phrases = [
+            'shutdown', 'shut down', 'shutdown pc', 'shut down pc', 
+            'shutdown computer', 'turn off computer', 'turn off pc',
+            'power off', 'shutdown system', 'shutdown my computer'
+        ]
+        
+        # Restart phrases
+        self.restart_phrases = [
+            'restart', 'restart pc', 'restart computer', 'reboot',
+            'reboot pc', 'reboot computer', 'restart system'
+        ]
+        
+        # Cancel phrases
+        self.cancel_phrases = [
+            'cancel', 'cancel shutdown', 'cancel restart', 'stop shutdown',
+            'don\'t shutdown', 'dont shutdown', 'abort shutdown', 'stop'
+        ]
         
         # Greetings
         self.greetings = [
@@ -119,6 +143,8 @@ class HybridAssistant:
             'cmd': 'cmd.exe',
             'powershell': 'powershell.exe',
             'chrome': 'chrome.exe',
+            'control panel': 'control.exe',
+            'controlpanel': 'control.exe',
         }
         
         # Folders
@@ -154,6 +180,154 @@ class HybridAssistant:
             print("   (Speech not available - text only)")
         
         return False
+    
+    def listen_during_countdown(self):
+        """Listen for cancellation during countdown"""
+        try:
+            if not self.mic_available:
+                return None
+            
+            with self.microphone as source:
+                print("\n🎤 Listening for cancellation... (say 'cancel')")
+                # Short timeout for listening
+                audio = self.recognizer.listen(source, timeout=2, phrase_time_limit=2)
+                text = self.recognizer.recognize_google(audio)
+                print(f"📝 Detected: {text}")
+                return text.lower()
+        except:
+            return None
+    
+    def listen_text_cancellation(self):
+        """Listen for text input cancellation"""
+        print("\n📝 Type 'cancel' to cancel or press Enter to continue...")
+        import sys
+        import select
+        
+        # Non-blocking input check
+        if sys.platform == 'win32':
+            import msvcrt
+            if msvcrt.kbhit():
+                response = input().strip().lower()
+                return response
+        return None
+    
+    def shutdown_computer(self):
+        """Shutdown the computer with cancellation option"""
+        self.cancel_action = False
+        
+        # Ask for confirmation first
+        self.speak("Are you sure you want to shutdown the computer? Say yes to confirm.")
+        
+        # Listen for confirmation
+        if self.mode == "voice":
+            confirm = self.listen_voice()
+        else:
+            confirm = self.get_text_input()
+        
+        if confirm and ('yes' in confirm or 'confirm' in confirm or 'ok' in confirm):
+            self.speak("Shutting down in 10 seconds. Say 'cancel' or type 'cancel' to stop.")
+            print("\n⚠️ Shutting down in 10 seconds...")
+            print("   Say 'cancel' or type 'cancel' to abort!")
+            
+            # Countdown with listening
+            for i in range(10, 0, -1):
+                print(f"   {i} seconds remaining... (say 'cancel' to abort)")
+                
+                # Check for voice cancellation
+                if self.mode == "voice" and self.mic_available:
+                    try:
+                        with self.microphone as source:
+                            # Quick listen for cancellation
+                            audio = self.recognizer.listen(source, timeout=1, phrase_time_limit=2)
+                            text = self.recognizer.recognize_google(audio).lower()
+                            if any(cancel in text for cancel in ['cancel', 'stop', 'abort']):
+                                self.speak("Shutdown cancelled.")
+                                print("✅ Shutdown cancelled!")
+                                return False
+                    except:
+                        pass
+                
+                # Check for text cancellation (if in text mode)
+                if self.mode == "text":
+                    # Check if user typed something
+                    import msvcrt
+                    if msvcrt.kbhit():
+                        response = input().strip().lower()
+                        if 'cancel' in response or 'stop' in response:
+                            self.speak("Shutdown cancelled.")
+                            print("✅ Shutdown cancelled!")
+                            return False
+                
+                time.sleep(1)
+            
+            # Execute shutdown
+            self.speak("Shutting down now.")
+            print("💻 Shutting down...")
+            os.system("shutdown /s /t 0")
+            return True
+        else:
+            self.speak("Shutdown cancelled.")
+            print("✅ Shutdown cancelled.")
+            return False
+    
+    def restart_computer(self):
+        """Restart the computer with cancellation option"""
+        self.cancel_action = False
+        
+        # Ask for confirmation first
+        self.speak("Are you sure you want to restart the computer? Say yes to confirm.")
+        
+        # Listen for confirmation
+        if self.mode == "voice":
+            confirm = self.listen_voice()
+        else:
+            confirm = self.get_text_input()
+        
+        if confirm and ('yes' in confirm or 'confirm' in confirm or 'ok' in confirm):
+            self.speak("Restarting in 10 seconds. Say 'cancel' or type 'cancel' to stop.")
+            print("\n⚠️ Restarting in 10 seconds...")
+            print("   Say 'cancel' or type 'cancel' to abort!")
+            
+            # Countdown with listening
+            for i in range(10, 0, -1):
+                print(f"   {i} seconds remaining... (say 'cancel' to abort)")
+                
+                # Check for voice cancellation
+                if self.mode == "voice" and self.mic_available:
+                    try:
+                        with self.microphone as source:
+                            # Quick listen for cancellation
+                            audio = self.recognizer.listen(source, timeout=1, phrase_time_limit=2)
+                            text = self.recognizer.recognize_google(audio).lower()
+                            if any(cancel in text for cancel in ['cancel', 'stop', 'abort']):
+                                self.speak("Restart cancelled.")
+                                print("✅ Restart cancelled!")
+                                return False
+                    except:
+                        pass
+                
+                # Check for text cancellation (if in text mode)
+                if self.mode == "text":
+                    # Check if user typed something
+                    import msvcrt
+                    if msvcrt.kbhit():
+                        response = input().strip().lower()
+                        if 'cancel' in response or 'stop' in response:
+                            self.speak("Restart cancelled.")
+                            print("✅ Restart cancelled!")
+                            return False
+                
+                time.sleep(1)
+            
+            # Execute restart
+            self.speak("Restarting now.")
+            print("💻 Restarting...")
+            os.system("shutdown /r /t 0")
+            return True
+        else:
+            self.speak("Restart cancelled.")
+            print("✅ Restart cancelled.")
+            return False
     
     def test_groq_api(self):
         """Test Groq API connection"""
@@ -240,6 +414,18 @@ class HybridAssistant:
     def is_creator_question(self, command):
         return any(phrase in command for phrase in self.creator_phrases)
     
+    def is_shutdown_command(self, command):
+        """Check if command is asking to shutdown"""
+        return any(phrase in command for phrase in self.shutdown_phrases)
+    
+    def is_restart_command(self, command):
+        """Check if command is asking to restart"""
+        return any(phrase in command for phrase in self.restart_phrases)
+    
+    def is_cancel_command(self, command):
+        """Check if command is asking to cancel"""
+        return any(phrase in command for phrase in self.cancel_phrases)
+    
     def handle_open_command(self, command):
         """Open applications/websites"""
         to_open = command.replace('open', '').strip()
@@ -279,21 +465,39 @@ class HybridAssistant:
     def show_help(self):
         """Show help menu"""
         help_text = """
-╔════════════════════════════════════════════════════════════╗
-║  VOICE ASSISTANT COMMANDS                                  ║
-╠════════════════════════════════════════════════════════════╣
-║  • "time"           - Current time                        ║
-║  • "date"           - Current date                        ║
-║  • "joke"           - Tell a joke                         ║
-║  • "hello"          - Greeting                            ║
-║  • "who made you"   - About my creator                    ║
-║  • "open notepad"   - Open application                    ║
-║  • "open google"    - Open website                        ║
-║  • ANY question     - Ask me anything!                    ║
-║  • "text mode"      - Switch to typing                    ║
-║  • "voice mode"     - Switch to speaking                  ║
-║  • "exit"           - Quit                                ║
-╚════════════════════════════════════════════════════════════╝
+╔══════════════════════════════════════════════════════════════════════╗
+║  VOICE ASSISTANT COMMANDS                                            ║
+╠══════════════════════════════════════════════════════════════════════╣
+║  BASIC COMMANDS:                                                     ║
+║  • "time"           - Current time                                  ║
+║  • "date"           - Current date                                  ║
+║  • "joke"           - Tell a joke                                   ║
+║  • "hello"          - Greeting                                      ║
+║  • "who made you"   - About my creator (Krish Kukal from Tecnia)   ║
+║                                                                      ║
+║  SYSTEM COMMANDS:                                                    ║
+║  • "shutdown"       - Shutdown computer (confirmation + 10 sec)    ║
+║  • "restart"        - Restart computer (confirmation + 10 sec)     ║
+║  • "cancel"         - Cancel shutdown/restart during countdown     ║
+║                                                                      ║
+║  OPEN COMMANDS:                                                      ║
+║  • "open notepad"   - Open Notepad                                  ║
+║  • "open calculator"- Open Calculator                               ║
+║  • "open paint"     - Open Paint                                    ║
+║  • "open control panel" - Open Control Panel                        ║
+║  • "open chrome"    - Open Chrome browser                           ║
+║  • "open google"    - Open Google website                           ║
+║  • "play [song]"    - Play song on YouTube                          ║
+║                                                                      ║
+║  MODE SWITCHING:                                                     ║
+║  • "text mode"      - Switch to typing                              ║
+║  • "voice mode"     - Switch to speaking                            ║
+║                                                                      ║
+║  • "help"           - Show this menu                                ║
+║  • "exit"           - Quit assistant                                ║
+║                                                                      ║
+║  💡 ASK ANY QUESTION - Groq AI will answer!                         ║
+╚══════════════════════════════════════════════════════════════════════╝
         """
         print(help_text)
         self.speak("Here are the available commands")
@@ -301,6 +505,23 @@ class HybridAssistant:
     def process_command(self, command):
         """Process command and SPEAK the answer"""
         if not command:
+            return True, False
+        
+        # Cancel command - if during countdown, this will be caught in the countdown loop
+        # But also handle immediate cancel if someone says cancel before countdown
+        if self.is_cancel_command(command):
+            self.cancel_action = True
+            self.speak("Cancelling action.")
+            return True, False
+        
+        # Shutdown command
+        if self.is_shutdown_command(command):
+            self.shutdown_computer()
+            return True, False
+        
+        # Restart command
+        if self.is_restart_command(command):
+            self.restart_computer()
             return True, False
         
         # Mode switching
